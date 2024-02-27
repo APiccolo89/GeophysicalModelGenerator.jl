@@ -16,6 +16,7 @@
     L0            = 400        # length of the slab
     D0            = 100        # thickness of the slab 
     WZ            = 50         # thickness of the weak zone 
+    Lb            = 200        # Length at which all the bending is happening (Lb<=L0)
     # -> Something to tell what is the phase of the weak zone
     # -> Something to tell what are the phases of the slab. 
 end
@@ -32,21 +33,59 @@ end
 
 function _compute_slab_surface!(t:Trench)
     # Spell out all the component of the surface 
-    D0 = t.D0;
-    L0 = t.L0;
-    WZ = t.WZ; 
+    D0        = t.D0;
+
+    L0        = t.L0;
+
+    Lb        = t.Lb; 
+
+    WZ        = t.WZ; 
+
+    n_seg     = t.n_seg; 
+
     theta_max = t.theta_max;
-    n_seg    = t.n_seg; 
+
+    # Convert theta_max into radians
+
+    theta_max = theta_max*pi/180;
+
+
+
+end
+
+function _compute_ribe_bending_angle(theta_max::Float64,Lb::Float64,l::float64)
+    # Input argument: 
+    # theta_max -> maximum bending angle in radians 
+    # Lb        -> the lenght at which the bending of the slab become effectively constant 
+    # l         -> the actual length 
     
+    # Compute theta
+    theta = theta*l^2*((3*Lb-2*l))/(Lb^3);
 
+    if l>Lb 
+        theta = theta_max; 
+    end
 
+    return theta
+end
 
+function _compute_linear_bending_angle(theta_max::Float64,Lb::Float64,l::float64)
+
+    # Compute the slope assuming that the minumum angle is 0.0 
+    s = (theta_max-0)/(L0);
+
+    # Compute the actual angle
+    theta= l*s;
+
+    # If l>L0 -> theta = theta_max
+    if l>Lb
+        theta=theta;
+    end
+
+    return theta 
 end
 
 
-
-
-end
 
 
 
