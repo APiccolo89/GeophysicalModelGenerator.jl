@@ -3,4 +3,4 @@
 .DS_Store
 Manifest.toml
 /docs/build
-.vscode/settings.json
+Subduction_Setup.vts
