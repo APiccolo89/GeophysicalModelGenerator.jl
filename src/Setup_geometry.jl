@@ -688,6 +688,21 @@ Parameters
     maxAge  = 60       # maximum thermal age of plate [Myrs]
 end
 
+@with_kw_noshow mutable struct McKenzie_subducting_slab <: AbstractThermalStructure
+    Tsurface = 0       # top T
+    Tmantle = 1350     # bottom T
+    Adiabat = 0        # Adiabatic gradient in K/km
+    v_s     = 2.0      # velocity of subduction  [cm/yrs]
+    Cp      = 1050     # Heat capacity   []
+    k       = 3        # Heat conductivity 
+    rho     = 3300     # denisty of the mantle [km/m3]
+    it      = 36       # number of harmonic summation (look Mckenzie formula)
+end
+
+
+
+
+
 function Compute_ThermalStructure(Temp, X, Y, Z, s::SpreadingRateTemp)
     @unpack Tsurface, Tmantle, Adiabat, MORside, SpreadingVel, AgeRidge, maxAge  = s
 
