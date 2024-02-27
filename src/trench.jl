@@ -49,6 +49,12 @@ function _compute_slab_surface!(t:Trench)
 
     theta_max = theta_max*pi/180;
 
+    if t.type_bending =="Ribe"
+        f_theta(x) = _compute_ribe_bending_angle(theta_max,Lb,x)
+    elseif t.type_bending =="Linear"
+        f_theta(x) = _compute_linear_bending_angle(theta_max,Lb,x)
+    end
+
 
 
 end
@@ -58,6 +64,7 @@ function _compute_ribe_bending_angle(theta_max::Float64,Lb::Float64,l::float64)
     # theta_max -> maximum bending angle in radians 
     # Lb        -> the lenght at which the bending of the slab become effectively constant 
     # l         -> the actual length 
+
     
     # Compute theta
     theta = theta*l^2*((3*Lb-2*l))/(Lb^3);
