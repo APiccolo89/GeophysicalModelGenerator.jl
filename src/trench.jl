@@ -30,7 +30,7 @@ end
 #         b.] If the A-B segment are the tip of a more complex curve transform the transform the coordinate (yTT=yT-xT^2=0.0)
 #         c.] Then select all the particles that belongs to each of the segment of the slab. 
 
-function _compute_slab_surface!(t:Trench)
+function compute_slab_surface!(t:Trench)
     # Spell out all the component of the surface 
     D0        = t.D0;
 
@@ -168,6 +168,11 @@ function create_slab!(X,Y,Z,Ph,T,t:Trench)
         Point_A = t.A[is];
 
         Point_B = t.B[is];
+
+        # Compute Top-Bottom surface 
+        # Or loop over the segment of the top/bottom surface and inpolygon each element or 
+
+        Top,MidS,Bottom,WZ_surf =compute_slab_surface!(t:Trench)
 
         # -> Compute coordinate transformation 
         # -> Create XT,YT,ZT ->
