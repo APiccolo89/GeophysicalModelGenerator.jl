@@ -50,14 +50,66 @@ function _compute_slab_surface!(t:Trench)
     theta_max = theta_max*pi/180;
 
     if t.type_bending =="Ribe"
+
         f_theta(x) = _compute_ribe_bending_angle(theta_max,Lb,x)
     elseif t.type_bending =="Linear"
+
         f_theta(x) = _compute_linear_bending_angle(theta_max,Lb,x)
     end
 
+    # Allocate the top,mid and bottom surface, and the weakzone 
+    Top = zeros(n_seg+1,2);
+
+    Bottom = zeros(n_seg+1,2);
+
+    MidS    = zeros(n_seg+1,2);
+
+    WZ_surf     = zeros(n_seg+1,2);
+
+    # Initialize the length. 
+    l = 0.0;   # initial length 
+
+    iter = 1;  # iteration 
+
+    dl = L0/n_seg; # dl 
+
+    while l<L0
+        ln = l+dl;
+        # Compute the mean angle within the segment
+
+        theta_mean[it] = (ftheta(l)+ftheta(ln))./2;
+        # Compute the mid surface coordinate
+
+        MidS[it+1,1] = MidS[it,1]+dl*cos(theta_mean(it));
+
+        MidS[it+1,2] = MidS[it,2]-dl.*sin(theta_mean(it));
+        #Compute the top surface coordinate
+
+        Top[it+1,1] = MidS[it+1,1]+0.5.*D0.*abs(sin(theta_mean(it)));
+
+        Top[it+1,2] = MidS[it+1,2]+0.5.*D0.*abs(cos(theta_mean(it)));
+        #Compute the bottom surface coordinate
+
+        Bottom[it+1,1] = MidS[it+1,1]-0.5.*D0.*abs(sin(theta_mean(it)));
+
+        Bottom[it+1,2] = MidS[it+1,2]-0.5.*D0.*abs(cos(theta_mean(it)));
+        # Compute the top surface for the weak zone 
+
+        WS_surf[it+1,1] = MidS[it+1,1]+(0.5.*D0+WZ_tk).*abs(sin(theta_mean(it)));
+
+        WS_surf[it+1,2] = MidS[it+1,2]+(0.5.*D0+WZ_tk).*abs(cos(theta_mean(it)));
+        # update l and it
+
+        l = ln;
+
+        it = it+1;
+
+    end
+
+    return Top,MidS,Bottom,WZ_surf
+    end
 
 
-end
 
 function _compute_ribe_bending_angle(theta_max::Float64,Lb::Float64,l::float64)
     # Input argument: 
