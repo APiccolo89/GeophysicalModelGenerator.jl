@@ -25,6 +25,7 @@ abstract type trench_slab end
     D0            = 100        # thickness of the slab 
     WZ            = 50         # thickness of the weak zone 
     Lb            = 200        # Length at which all the bending is happening (Lb<=L0)
+    d_decoupling  = 100        # decoupling depth of the slab
     # -> Something to tell what is the phase of the weak zone
     # -> Something to tell what are the phases of the slab. 
 end
