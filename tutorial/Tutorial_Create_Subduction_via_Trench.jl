@@ -4,9 +4,9 @@ using Plots
 
 
 # number of cells in every direction
-nx = 100;
-ny = nx+1;
-nz = nx+2;
+nx = 512;
+ny = nx;
+nz = nx;
 
 
 # define domain size
@@ -23,7 +23,9 @@ Phase   = ones(Int32,size(X));
 
 Temp    = ones(Float64,size(X))*1350;
 
-t_ = Trench(1,(200.0,400.0),(500.0,700.0),45.0,"Ribe",50,300.0,100.0,20.0,200.0,100.0)
+t_ = Trench(1,(200.0,400.0),(500.0,700.0),90.0,"Ribe",50,500.0,100.0,20.0,200.0,100.0)
+t_2 = Trench(1,(200.0,400.0),(500.0,700.0),-90.0,"Ribe",50,500.0,100.0,20.0,200.0,100.0)
+
 
 Top,MidS,Bottom,WZ_surf,theta_mean = compute_slab_surface!(t_.D0,t_.L0,t_.Lb,t_.WZ,t_.n_seg,abs(t_.theta_max),t_.type_bending);
 
