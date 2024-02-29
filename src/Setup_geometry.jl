@@ -449,10 +449,8 @@ end
 
 
 
-
-
 function AddPolygon!(Phase, Temp, Grid::AbstractGeneralGrid;                 # required input
-    xlim=Tuple{}, ylim=nothing, zlim=Tuple{},     # limits of the box
+    xlim=Tuple{}, ylim=Tuple{2}, zlim=Tuple{},     # limits of the box
     Origin=nothing, StrikeAngle=0, DipAngle=0,      # origin & dip/strike
     phase = ConstantPhase(1),                       # Sets the phase number(s) in the box
     T=nothing )                                     # Sets the thermal structure (various functions are available)
@@ -460,21 +458,21 @@ function AddPolygon!(Phase, Temp, Grid::AbstractGeneralGrid;                 # r
 # Retrieve 3D data arrays for the grid
 X,Y,Z = coordinate_grids(Grid)
 
-# Limits of block
-if ylim==nothing
-ylim = (minimum(Y), maximum(Y))
-end
 
-# initialize vector
 indx = zeros(length(X))
 
 # find points of the total script within the polygone, only in 2D due to the symetric structures and index of y
 for i = 1:length(X)
-    indx[i] = inPoly(xlim,zlim, X[i],Z[i])
+
+    # working but not the fastest
+    if Y[i] >= ylim[1] && Y[i]<=ylim[2] 
+        indx[i] = inPoly(xlim,zlim, X[i], Z[i])
+    end
 end
 
 # get all indices which are in the polygone separated
 ind = findall(x->x>0,indx)
+
 
 # Compute thermal structure accordingly. See routines below for different options
 if T != nothing
@@ -486,6 +484,7 @@ Phase[ind] = Compute_Phase(Phase[ind], Temp[ind], X[ind], Y[ind], Z[ind], phase)
 
 return nothing
 end
+
 
 
 function inPoly(PolyX, PolyY, x, y)
