@@ -171,6 +171,8 @@ function create_slab!(X,Y,Z,Ph,T,t::Trench)
 
         Top,MidS,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending)
 
+
+
         # Compute Top-Bottom surface 
         # Or loop over the segment of the top/bottom surface and inpolygon each element or 
         # interpolate top-bottom surface onto particles -> transform ZT and use inbox 
@@ -181,7 +183,7 @@ function create_slab!(X,Y,Z,Ph,T,t::Trench)
 
 end
 
-function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
+function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 
     # Create the XT,YT 
     XT = zeros(size(X));
@@ -189,16 +191,14 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
     YT = zeros(size(Y)); 
 
     # Function to transform the coordinate 
-    XT,YT, xb = transform_coordinate!(X,Y,XT,YT,A,B); 
+    XT,YT, xb = transform_coordinate!(X,Y,XT,YT,A,B,sign(theta_max)); 
 
     dl = L0/seg_slab; 
 
     l = 0 
     # Construct the slab 
-    for i = 1:(n_seg-1)
+    for i = 1:(seg_slab-1)
         ln = l+dl; 
-        
-        
         
         pa = (Top[i,1],Top[i,2]); # D = 0 | L = l 
 
@@ -206,24 +206,41 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 
         pc = (Bottom[i+1,1],Bottom[i+1,2]); # D = -D0 |L=L+dl
 
-        pd = (Top[i+1,1],Top[i+1,1]) # D = 0| L = L+dl
+        pd = (Top[i+1,1],Top[i+1,2]) # D = 0| L = L+dl
 
         # Create the polygon 
-        poly_x = [pa[1],pb[1],pc[1],pd[1]];
+        poly_y = [pa[1],pb[1],pc[1],pd[1]];
         poly_z = [pa[2],pb[2],pc[2],pd[2]];
-        xmin = minimum(poly_x);
-        xmax = maximum(poly_x);
+        @show poly_y
+        @show poly_z
+
+        ymin = minimum(poly_y);
+        ymax = maximum(poly_y);
         zmin = minimum(poly_z);
         zmax = maximum(poly_z);
+        ind_chosen = findall(0.0.<= XT.<= xb[1] .&& ymin .<= YT .<= ymax .&& zmin .<= Z .<= zmax);
+        ind_seg = []
+        yp = YT[ind_chosen];
+        zp = Z[ind_chosen];
 
-        ind_chosen = findall()
+        ind = zeros(Bool,size(zp));
+
+        inPoly!(poly_y,poly_z,yp,zp,ind); 
+
+        ind_prophet = ind_chosen[ind]
 
 
+
+        d[ind_prophet] .= 1.0;
+        ls[ind_prophet].= 1.0; 
+
+
+
+        # Interpolations
+        
         # Use inpolygon 
         # find all the points that are likely to be within the polygon 
         
-
-
         # Interpolate into the marker the l/d 
         # Procede
         # -
@@ -231,11 +248,7 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
         
         l = ln; 
     end
-    # Use box function of Boris using as coordinate XT,l,d 
-
-
-    return d,l;
-
+    return XT,YT,Z,d,l
 end
 
 # Internal function that rotates the coordinates
@@ -257,7 +270,7 @@ function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
     return nothing
 end
 
-function transform_coordinate!(X,Y,XT,YT,A,B)
+function transform_coordinate!(X,Y,XT,YT,A,B,direction)
     
     # find the slope of AB points
     s = (B[2]-A[2])/(B[1]-A[1])
@@ -281,6 +294,8 @@ function transform_coordinate!(X,Y,XT,YT,A,B)
     # Transform the coordinates
     Rot3D!(XT,YT,Z, angle_rot, 0);
 
+    YT = YT*direction; 
+
     roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
     rotz = [cosd(angle_rot) -sind(angle_rot) 0 ; sind(angle_rot) cosd(angle_rot) 0 ; 0 0 1]
 
@@ -288,19 +303,12 @@ function transform_coordinate!(X,Y,XT,YT,A,B)
     Bn = roty*Bn; 
     @show Bn 
 
-    
-
     return XT,YT,Bn
 
 end
 
-function inPoly(PolyX, PolyY, x, y)
-    # Written by Arne Spang based on this link:
 
-    inside = false
-    iSteps = collect(eachindex(PolyX))
-    jSteps = [length(PolyX); collect(1:length(PolyX)-1)]
-
+function inPolyPoint(PolyX::Vector{T}, PolyY::Vector{T}, x::T, y::T, inside::Bool, inside2::Bool, iSteps::Vector{Int64}, jSteps::Vector{Int64}) where T <: Real
     for (i,j) in zip(iSteps, jSteps)
         xi = PolyX[i]
         yi = PolyY[i]
@@ -308,11 +316,36 @@ function inPoly(PolyX, PolyY, x, y)
         yj = PolyY[j]
 
         if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + eps()) + xi)
-
             inside = !inside
         end
-    end
 
-    return inside
+        if ((yi > y) != (yj > y)) && (x <= (xj - xi) * (y - yi) / (yj - yi + eps()) + xi)
+            inside2 = !inside2
+        end
+    end
+    return (inside || inside2)
 end
 
+function inPoly!(PolyX::Vector{T}, PolyY::Vector{T}, x::Vector{T}, y::Vector{T}, inside::Vector{Bool}) where T <: Real
+    yN  = false
+    yN2 = false
+    iSteps = collect(eachindex(PolyX))
+    jSteps = [length(PolyX); collect(1:length(PolyX)-1)]
+
+    for i = eachindex(x)
+        inside[i] = inPolyPoint(PolyX, PolyY, x[i], y[i], yN, yN2, iSteps, jSteps)
+    end
+end
+
+function inPoly!(PolyX::Vector{T}, PolyY::Vector{T}, X::Matrix{T}, Y::Matrix{T}, INSIDE::Matrix{Bool}) where T <: Real
+    yN  = false
+    yN2 = false
+    iSteps = collect(eachindex(PolyX))
+    jSteps = [length(PolyX); collect(1:length(PolyX)-1)]
+
+    for j = 1 : size(X, 2)
+        for i = 1 : size(X, 1)
+            INSIDE[i,j] = inPolyPoint(PolyX, PolyY, X[i,j], Y[i,j], yN, yN2, iSteps, jSteps)
+        end
+    end
+end
