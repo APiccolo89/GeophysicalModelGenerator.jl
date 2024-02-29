@@ -8,7 +8,7 @@ using SpecialFunctions: erfc
 # These are routines that help to create input geometries, such as slabs with a given angle
 #
 
-export  AddBox!, AddSphere!, AddEllipsoid!, AddCylinder!, AddLayer!,
+export  AddBox!, AddSphere!, AddEllipsoid!, AddCylinder!, AddLayer!, AddPolygon!,
         makeVolcTopo,
         ConstantTemp, LinearTemp, HalfspaceCoolingTemp, SpreadingRateTemp,
         ConstantPhase, LithosphericPhases,
@@ -446,6 +446,68 @@ function AddCylinder!(Phase, Temp, Grid::AbstractGeneralGrid;   # required input
 
     return nothing
 end
+
+
+
+
+
+function AddPolygon!(Phase, Temp, Grid::AbstractGeneralGrid;                 # required input
+    xlim=Tuple{}, ylim=nothing, zlim=Tuple{},     # limits of the box
+    Origin=nothing, StrikeAngle=0, DipAngle=0,      # origin & dip/strike
+    phase = ConstantPhase(1),                       # Sets the phase number(s) in the box
+    T=nothing )                                     # Sets the thermal structure (various functions are available)
+
+# Retrieve 3D data arrays for the grid
+X,Y,Z = coordinate_grids(Grid)
+
+# Limits of block
+if ylim==nothing
+ylim = (minimum(Y), maximum(Y))
+end
+
+# initialize vector
+indx = zeros(length(X))
+
+# find points of the total script within the polygone, only in 2D due to the symetric structures and index of y
+for i = 1:length(X)
+    indx[i] = inPoly(xlim,zlim, X[i],Z[i])
+end
+
+# get all indices which are in the polygone separated
+ind = findall(x->x>0,indx)
+
+# Compute thermal structure accordingly. See routines below for different options
+if T != nothing
+Temp[ind] = Compute_ThermalStructure(Temp[ind], X[ind], Y[ind], Z[ind], T)
+end
+
+# Set the phase. Different routines are available for that - see below.
+Phase[ind] = Compute_Phase(Phase[ind], Temp[ind], X[ind], Y[ind], Z[ind], phase)
+
+return nothing
+end
+
+
+function inPoly(PolyX, PolyY, x, y)
+    inside = false
+    iSteps = collect(eachindex(PolyX))
+    jSteps = [length(PolyX); collect(1:length(PolyX)-1)]
+
+    for (i,j) in zip(iSteps, jSteps)
+        xi = PolyX[i]
+        yi = PolyY[i]
+        xj = PolyX[j]
+        yj = PolyY[j]
+
+        if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + eps()) + xi)
+
+            inside = !inside
+        end
+    end
+
+    return inside
+end
+
 
 # Internal function that rotates the coordinates
 function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
