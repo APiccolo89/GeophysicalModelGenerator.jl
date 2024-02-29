@@ -3,6 +3,8 @@ using Base: Int64, Float64, NamedTuple
 using Printf
 using Parameters        # helps setting default parameters in structures
 using SpecialFunctions: erfc
+using GeophysicalModelGenerator
+
 abstract type trench_slab end
 
 
@@ -49,7 +51,9 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
 
     # Allocate the top,mid and bottom surface, and the weakzone 
     Top = zeros(n_seg+1,2);
+
     theta_mean = zeros(n_seg,1); 
+
     Bottom = zeros(n_seg+1,2);
     Bottom[1,2] = -D0; 
 
@@ -57,7 +61,7 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
     MidS[1,2] = -D0./2;
 
     WZ_surf     = zeros(n_seg+1,2);
-
+    WZ_surf[1,2] = WZ;
     # Initialize the length. 
     l = 0.0;   # initial length 
 
@@ -68,7 +72,6 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
     while l<L0
         ln = l+dl
         # Compute the mean angle within the segment
-
         theta_mean[it] = (compute_bending_angle!(theta_max,Lb,l,type_bending)+compute_bending_angle!(theta_max,Lb,ln,type_bending))./2;
         # Compute the mid surface coordinate
         @show theta_mean[it] 
@@ -91,10 +94,7 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
 
         WZ_surf[it+1,2] = MidS[it+1,2]+(0.5.*D0+WZ).*abs(cos(theta_mean[it]));
         # update l and it
-        @show l
         l = ln;
-        @show l
-
         it = it+1;
 
     end
@@ -198,9 +198,6 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
     for i = 1:(n_seg-1)
         ln = l+dl; 
         
-        y_lc = [Top[i,1],Top[i+1,1],Bottom[i,1],Bottom[i+1,1]];
-        
-        z_lc = [Top[i,2],Top[i+1,2],Bottom[i,2],Bottom[i+1,2]];
         
         
         pa = (Top[i,1],Top[i,2]); # D = 0 | L = l 
@@ -212,19 +209,19 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
         pd = (Top[i+1,1],Top[i+1,1]) # D = 0| L = L+dl
 
         # Create the polygon 
+        poly_x = [pa[1],pb[1],pc[1],pd[1]];
+        poly_z = [pa[2],pb[2],pc[2],pd[2]];
+        xmin = minimum(poly_x);
+        xmax = maximum(poly_x);
+        zmin = minimum(poly_z);
+        zmax = maximum(poly_z);
 
-        scaling_x = 1/((maximum(x_lc))-minimum(x_lc))
+        ind_chosen = findall()
 
 
         # Use inpolygon 
         # find all the points that are likely to be within the polygon 
-        ind_part = findall(minimum(z_lc) .<= Z .<= maximum(z_lc) .&& minumum(y_lc) .<= YT .<= maximum(y_lc));
         
-        for in = 1:length(ind_part)
-            y = YT[ind[in]];
-            z = Z[ind[in]];
-
-        end
 
 
         # Interpolate into the marker the l/d 
@@ -237,38 +234,85 @@ function find_slab!(X,Y,Z,d,l,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
     # Use box function of Boris using as coordinate XT,l,d 
 
 
+    return d,l;
 
+end
 
+# Internal function that rotates the coordinates
+function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
+
+    # rotation matrixes
+    roty = [cosd(-DipAngle) 0 sind(-DipAngle) ; 0 1 0 ; -sind(-DipAngle) 0  cosd(-DipAngle)];
+    rotz = [cosd(StrikeAngle) -sind(StrikeAngle) 0 ; sind(StrikeAngle) cosd(StrikeAngle) 0 ; 0 0 1]
+
+    for i in eachindex(X)
+        CoordVec = [X[i], Y[i], Z[i]]
+        CoordRot =  rotz*CoordVec;
+        CoordRot =  roty*CoordRot;
+        X[i] = CoordRot[1];
+        Y[i] = CoordRot[2];
+        Z[i] = CoordRot[3];
+    end
+
+    return nothing
 end
 
 function transform_coordinate!(X,Y,XT,YT,A,B)
     
     # find the slope of AB points
-    s = (B[2]-A[2])/(B[2]-B[1])
+    s = (B[2]-A[2])/(B[1]-A[1])
 
-    angle_rot = tand(s); 
+    @show s 
+
+    angle_rot = -atand(s); 
+
+    @show angle_rot
 
     # Shift the origin 
-    XT = X .+A[1]; 
+    XT = X .-A[1]; 
 
-    YT = Y .+A[2]; 
+    YT = Y .-A[2]; 
+
+    Bn = zeros(3);
+    Bn[1] = B[1]-A[1];
+    Bn[2] = B[2]-A[2]; 
+    Bn[3] = 0.0;
 
     # Transform the coordinates
-    XT = XT.*cos(angle_rot)-YT.*sin(angle_rot);
+    Rot3D!(XT,YT,Z, angle_rot, 0);
 
-    YT = XT.*sin(angle_rot)+YT.*cos(angle_rot); 
+    roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
+    rotz = [cosd(angle_rot) -sind(angle_rot) 0 ; sind(angle_rot) cosd(angle_rot) 0 ; 0 0 1]
 
-    xb[1] = B[1]*cos(angle_rot)-B[2]*sin(angle_rot);
+    Bn = rotz* Bn;
+    Bn = roty*Bn; 
+    @show Bn 
 
-    xb[2] = B[1]*sin(angle_rot)+B[2]*cos(angle_rot); 
+    
 
-    return XT,YT,xb
+    return XT,YT,Bn
 
 end
 
+function inPoly(PolyX, PolyY, x, y)
+    # Written by Arne Spang based on this link:
 
+    inside = false
+    iSteps = collect(eachindex(PolyX))
+    jSteps = [length(PolyX); collect(1:length(PolyX)-1)]
 
+    for (i,j) in zip(iSteps, jSteps)
+        xi = PolyX[i]
+        yi = PolyY[i]
+        xj = PolyX[j]
+        yj = PolyY[j]
 
+        if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + eps()) + xi)
 
+            inside = !inside
+        end
+    end
 
+    return inside
+end
 
