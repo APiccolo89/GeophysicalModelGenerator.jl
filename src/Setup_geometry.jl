@@ -12,7 +12,7 @@ export  AddBox!, AddSphere!, AddEllipsoid!, AddCylinder!, AddLayer!, AddPolygon!
         makeVolcTopo,
         ConstantTemp, LinearTemp, HalfspaceCoolingTemp, SpreadingRateTemp,
         ConstantPhase, LithosphericPhases,
-        Compute_ThermalStructure, Compute_Phase
+        Compute_ThermalStructure, Compute_Phase,Compute_ThermalStructureSlab
 
 
 """
@@ -723,15 +723,15 @@ function Compute_ThermalStructure(Temp, X, Y, Z, s::HalfspaceCoolingTemp)
 end
 
 @with_kw_noshow mutable struct McKenzie_subducting_slab <: AbstractThermalStructure
-    Tsurface = 0       # top T
-    Tmantle = 1350     # bottom T
-    Age     = 60          # thermal age of plate [in Myrs]
-    Adiabat = 0        # Adiabatic gradient in K/km
-    v_s     = 2.0      # velocity of subduction  [cm/yrs]
-    Cp      = 1050     # Heat capacity   []
-    k       = 3        # Heat conductivity 
-    rho     = 3300     # denisty of the mantle [km/m3]
-    it      = 36       # number of harmonic summation (look Mckenzie formula)
+    Tsurface = 20       # top T
+    Tmantle  = 1350     # bottom T
+    Age      = 60          # thermal age of plate [in Myrs]
+    Adiabat  = 0        # Adiabatic gradient in K/km
+    v_s      = 2.0      # velocity of subduction  [cm/yrs]
+    Cp       = 1050     # Heat capacity   []
+    k        = 3        # Heat conductivity 
+    rho      = 3300     # denisty of the mantle [km/m3]
+    it       = 36       # number of harmonic summation (look Mckenzie formula)
 end
 
 function Compute_ThermalStructureSlab(Temp, X, Y, Z, s::McKenzie_subducting_slab,t::trench)
@@ -748,6 +748,8 @@ function Compute_ThermalStructureSlab(Temp, X, Y, Z, s::McKenzie_subducting_slab
         Temp[i] =   (Tsurface .- Tmantle)*erfc((abs.(Z[i])*1e3)./(2*sqrt(kappa*ThermalAge)))
     end
 
+    # Convert the velocity 
+    vs = vs*100/(365.25*60*60*24);
     # calculate the Reynolds number
     Re = (rho*Cp*v_s*D0*1000)/2/k
 

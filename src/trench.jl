@@ -4,6 +4,7 @@ using Printf
 using Parameters        # helps setting default parameters in structures
 using SpecialFunctions: erfc
 using GeophysicalModelGenerator
+using ScatteredInterpolation
 
 abstract type trench_slab end
 
@@ -25,11 +26,9 @@ abstract type trench_slab end
     n_seg         = 50         # definition segment 
     L0            = 400        # length of the slab
     D0            = 100        # thickness of the slab 
-    WZ            = 50         # thickness of the weak zone 
-    Lb            = 200        # Length at which all the bending is happening (Lb<=L0)
-    d_decoupling  = 100        # decoupling depth of the slab
-    # -> Something to tell what is the phase of the weak zone
-    # -> Something to tell what are the phases of the slab. 
+    WZ            = 50        # thickness of the weak zone 
+    Lb            = 200       # Length at which all the bending is happening (Lb<=L0)
+    d_decoupling  = 100       # decoupling depth of the slab
 end
 
 # function to compute top surface bottom surface 
@@ -112,27 +111,30 @@ function compute_bending_angle!(theta_max::Float64,Lb::Float64,l::Float64,type::
     if type == "Ribe"    
         # Compute theta
         theta = theta_max*l^2*((3*Lb-2*l))/(Lb^3);
+
     elseif type == "Linear"
+
         # Compute the slope assuming that the minumum angle is 0.0 
         s = (theta_max-0)/(L0);
+
         # Compute the actual angle
         theta= l*s;
     end
     # If l>L0 -> theta = theta_max
     if l>Lb
+
         theta=theta_max;
     end
 
     return theta 
 end
 
-function create_slab!(X,Y,Z,Ph,T,t::Trench)
+function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
     # Spell out the trench structure
     # Loop over the segment avaiable in the structure
     # -> transform the coordinate 
     # -> create XT,YT,ZT such that XT//AB segment and YT is perpendicular
     # -> See if there are curved boundaries -> compute dy to compute YTT | trench == 0.0. 
-
     #1. Spell out the structure
 
     D0 = t.D0; 
@@ -144,6 +146,7 @@ function create_slab!(X,Y,Z,Ph,T,t::Trench)
     Lb    = t.Lb; 
 
     theta_max = t.theta_max;
+    @show theta_max
 
     A = t.A;
 
@@ -151,16 +154,18 @@ function create_slab!(X,Y,Z,Ph,T,t::Trench)
 
     n_seg_xy = t.n_seg_xy; 
 
+    WZ = t.WZ; 
+
     # Allocate d-l structure 
 
     # -> d = distance from the top surface
-    d = fill!(array(Float64,size(X),NaN))
+    d = ones(size(X)).*NaN64
 
     # -> l = length from the trench along the slab 
-    l = fill!(array(Float64,size(X),NaN))
+    ls = ones(size(X)).*NaN64
 
     #Loop over the segment of the slab
-    for is =1:n_seg
+    for is =1:n_seg_xy
 
         Point_A = t.A[is];
 
@@ -168,19 +173,23 @@ function create_slab!(X,Y,Z,Ph,T,t::Trench)
 
         # Compute Top-Bottom surface 
         # Or loop over the segment of the top/bottom surface and inpolygon each element or 
-
         Top,MidS,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending)
 
+        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0)
 
+        # Function to fill up the temperature and the phase. I need to personalize addbox! 
 
-        # Compute Top-Bottom surface 
-        # Or loop over the segment of the top/bottom surface and inpolygon each element or 
-        # interpolate top-bottom surface onto particles -> transform ZT and use inbox 
-        #-> Top-bottom surface are giving maximum depth+max y and x1-x2. 
-        # 
+        ind = findall((-D0 .<= d .<= 0.0));
+
+        # Compute thermal structure accordingly. See routines below for different options
+        T[ind] = Compute_ThermalStructure(T[ind], XT[ind], ls[ind], d[ind], temp)
+
+        # Set the phase. Different routines are available for that - see below.
+        Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
 
     end
 
+    return d, ls
 end
 
 function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
@@ -191,13 +200,17 @@ function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
     YT = zeros(size(Y)); 
 
     # Function to transform the coordinate 
+    @show theta_max
     XT,YT, xb = transform_coordinate!(X,Y,XT,YT,A,B,sign(theta_max)); 
 
+    # dl 
     dl = L0/seg_slab; 
 
-    l = 0 
+    l = 0  # length at the trench position
+
     # Construct the slab 
     for i = 1:(seg_slab-1)
+        
         ln = l+dl; 
         
         pa = (Top[i,1],Top[i,2]); # D = 0 | L = l 
@@ -210,46 +223,67 @@ function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 
         # Create the polygon 
         poly_y = [pa[1],pb[1],pc[1],pd[1]];
+
         poly_z = [pa[2],pb[2],pc[2],pd[2]];
-        @show poly_y
-        @show poly_z
 
+        # find a sub set of particles
         ymin = minimum(poly_y);
+        
         ymax = maximum(poly_y);
+        
         zmin = minimum(poly_z);
+        
         zmax = maximum(poly_z);
-        ind_chosen = findall(0.0.<= XT.<= xb[1] .&& ymin .<= YT .<= ymax .&& zmin .<= Z .<= zmax);
-        ind_seg = []
-        yp = YT[ind_chosen];
-        zp = Z[ind_chosen];
 
+        ind_s = findall(0.0.<= XT.<= xb[1] .&& ymin .<= YT .<= ymax .&& zmin .<= Z .<= zmax);
+
+        # Find the particles 
+        yp = YT[ind_s];
+        
+        zp = Z[ind_s];
+        
+        # Initialize the ind that are going to be used by inpoly
         ind = zeros(Bool,size(zp));
-
+        
+        # inPoly! [Written by Arne Spang, must be updated with the new version]
         inPoly!(poly_y,poly_z,yp,zp,ind); 
+        
+        # indexes of the segment
+        ind_seg = ind_s[ind]
+        
+        # Prepare the variable to interpolate {I put here because to allow also a variation of thickness of the slab}
+        D = [0.0,-D0,-D0,0.0];
 
-        ind_prophet = ind_chosen[ind]
-
-
-
-        d[ind_prophet] .= 1.0;
-        ls[ind_prophet].= 1.0; 
-
-
-
+        L = [l,l,ln,ln];
+        
         # Interpolations
+        points = [pa[1] pa[2];pb[1] pb[2];pc[1] pc[2];pd[1] pd[2]]'
         
-        # Use inpolygon 
-        # find all the points that are likely to be within the polygon 
+        itp1 = interpolate(Shepard(), points, D);
         
-        # Interpolate into the marker the l/d 
-        # Procede
-        # -
-        # find all the particles within this poligon 
+        itp2 = interpolate(Shepard(), points, L);
         
+        # Loop over the chosen particles and interpolate the current value of L and D. 
+        particle_n = length(ind_seg)
+
+        for ip = 1:particle_n
+
+            point_ = [YT[ind_seg[ip]],Z[ind_seg[ip]]];
+
+            d[ind_seg[ip]] = evaluate(itp1,point_)[1];
+
+            ls[ind_seg[ip]] = evaluate(itp2,point_)[1];
+        end
+
+        #Update l
         l = ln; 
     end
-    return XT,YT,Z,d,l
+
+    # The required variable {XT the x vector transformed, d, the layout of d, l, the layout of length, xb the limit of the slab along x}
+    return XT, d, ls, xb
 end
+
+
 
 # Internal function that rotates the coordinates
 function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
@@ -293,7 +327,7 @@ function transform_coordinate!(X,Y,XT,YT,A,B,direction)
 
     # Transform the coordinates
     Rot3D!(XT,YT,Z, angle_rot, 0);
-
+    @show direction
     YT = YT*direction; 
 
     roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
