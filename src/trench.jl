@@ -7,6 +7,7 @@ using GeophysicalModelGenerator
 using ScatteredInterpolation
 
 abstract type trench_slab end
+abstract type AbstractThermalStructure end
 
 
 # Basic folder where to contain the function of trench
@@ -31,6 +32,79 @@ abstract type trench_slab end
     d_decoupling  = 100       # decoupling depth of the slab
 end
 
+
+
+@with_kw_noshow mutable struct McKenzie_subducting_slab <: AbstractThermalStructure
+    Tsurface = 20       # top T
+    Tmantle  = 1350     # bottom T
+    Age      = 60          # thermal age of plate [in Myrs]
+    Adiabat  = 0        # Adiabatic gradient in K/km
+    v_s      = 2.0      # velocity of subduction  [cm/yrs]
+    Cp       = 1050     # Heat capacity   []
+    k        = 3        # Heat conductivity 
+    rho      = 3300     # denisty of the mantle [km/m3]
+    it       = 36       # number of harmonic summation (look Mckenzie formula)
+end
+
+function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab,ldc,t::Trench)
+
+    @unpack Tsurface, Tmantle, Adiabat, Age, v_s, Cp, k, rho, it = s
+    @unpack L0, D0, d_decoupling = t
+
+    # calculate halfspace cooling temperature
+    kappa       =   1e-6
+    SecYear     =   3600*24*365
+    ThermalAge  =   Age*1e6*SecYear
+
+    # Compute the 
+    for i in eachindex(Temp)
+        Temp[i] = Tmantle+  (Tsurface .-Tmantle)*erfc((abs.(d[i])*1e3)./(2*sqrt(kappa*ThermalAge)))
+    end
+
+    @show it ;
+
+    # Convert the velocity 
+    v_s = v_s/(100*365.25*60*60*24);
+    @show v_s; 
+    # calculate the Reynolds number
+    Re = (rho*Cp*v_s*D0*1000)/2/k;
+    @show Re
+    @show k 
+    @show Cp
+
+
+    # McKenzie model
+    sc = 1/D0
+    σ  = zeros(size(Temp));
+    Temp_McK = zeros(size(Temp));
+    # Dividi et impera
+    for i=1:it
+        a   = (-1).^(i)./(i.*pi)
+        b   = (Re .- (Re.^2 .+ i .^2. *pi .^2) .^(0.5)) .*l .*sc;
+        c   = sin.(i .*pi .*(1 .- abs.(d .*sc))) ;
+        e   = exp.(b);
+        σ .+= a.*e.*c
+    end
+
+    Temp_McK           .= (Tmantle) .+2 .*(Tmantle-Tsurface).*σ;
+    ind_neg             = findall(Temp_McK .< Tsurface);
+    Temp_McK[ind_neg]  .= Tsurface; 
+
+
+    weight = 0.1 .+(0.8-0.1) ./(ldc*sc) .*(l*sc)
+    ind_1 = findall(weight .>1.0);
+    ind_2 =findall(weight .<0.1);
+    weight[ind_1] .= 1.0; 
+    weight[ind_2] .= 0.1;
+
+    #@show weight
+
+
+    Temp .= weight .*Temp_McK+(1 .-weight) .*Temp;
+
+    return Temp
+end
+
 # function to compute top surface bottom surface 
 # What do I have in mind? 
 # => For a given segment of any orientation: 
@@ -42,11 +116,9 @@ end
 
 function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n_seg::Int64,theta_max::Float64,type_bending::String)
     # Convert theta_max into radians
-    print("$theta_max")
 
     theta_max = theta_max*pi/180;
 
-    print("$theta_max")
 
     # Allocate the top,mid and bottom surface, and the weakzone 
     Top = zeros(n_seg+1,2);
@@ -73,7 +145,6 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
         # Compute the mean angle within the segment
         theta_mean[it] = (compute_bending_angle!(theta_max,Lb,l,type_bending)+compute_bending_angle!(theta_max,Lb,ln,type_bending))./2;
         # Compute the mid surface coordinate
-        @show theta_mean[it] 
         MidS[it+1,1] = MidS[it,1]+dl*cos(theta_mean[it]);
 
         MidS[it+1,2] = MidS[it,2]-dl.*sin(theta_mean[it]);
@@ -98,7 +169,7 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
 
     end
 
-    return Top,MidS,Bottom,WZ_surf,theta_mean #{Filling the structure?}
+    return Top,MidS,Bottom,WZ_surf,theta_mean; #{Filling the structure?}
 
     end
 
@@ -146,7 +217,6 @@ function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
     Lb    = t.Lb; 
 
     theta_max = t.theta_max;
-    @show theta_max
 
     A = t.A;
 
@@ -159,10 +229,10 @@ function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
     # Allocate d-l structure 
 
     # -> d = distance from the top surface
-    d = ones(size(X)).*NaN64
+    d = ones(size(X)).*NaN64;
 
     # -> l = length from the trench along the slab 
-    ls = ones(size(X)).*NaN64
+    ls = ones(size(X)).*NaN64;
 
     #Loop over the segment of the slab
     for is =1:n_seg_xy
@@ -173,16 +243,21 @@ function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
 
         # Compute Top-Bottom surface 
         # Or loop over the segment of the top/bottom surface and inpolygon each element or 
-        Top,MidS,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending)
+        Top,MidS,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
 
-        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0)
+        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
+
+        l_decouplingind = findall(Top[:,2].<=-t_.d_decoupling);
+
+        l_decoupling = Top[l_decouplingind[1],1];
+        
 
         # Function to fill up the temperature and the phase. I need to personalize addbox! 
 
         ind = findall((-D0 .<= d .<= 0.0));
 
         # Compute thermal structure accordingly. See routines below for different options
-        T[ind] = Compute_ThermalStructure(T[ind], XT[ind], ls[ind], d[ind], temp)
+        T[ind] = Compute_ThermalStructureSlab(T[ind], XT[ind], ls[ind], d[ind],temp,l_decoupling,t);
 
         # Set the phase. Different routines are available for that - see below.
         Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)

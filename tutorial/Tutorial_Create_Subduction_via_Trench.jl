@@ -1,6 +1,5 @@
-include("../src/trench.jl")
-include("../src/Setup_geometry.jl")
 using GeophysicalModelGenerator
+include("../src/trench.jl")
 using Plots
 using ScatteredInterpolation 
 
@@ -31,22 +30,15 @@ t_2 = Trench(1,(200.0,400.0),(500.0,700.0),-30.0,"Ribe",50,500.0,100.0,20.0,200.
 t_2.Lb = 400.0
 
 stratigraphy_slab = LithosphericPhases(Layers=[10 90], Phases=[2 3 1], Tlab=1300 )
-Tsurface
-Tmantle
-Age    
-Adiabat
-v_s    
-Cp     
-k      
-rho    
-it     
+
 temperature_slab=McKenzie_subducting_slab(20,1350,30,0.4,2.5,1050,3.0,3300,36);
 
-temperature_slab2=McKenzie_subducting_slab()
+temperature_slab2=McKenzie_subducting_slab(20,1350,30,0.4,10.0,1050,3.0,3300,36);
+
 
 
 d,l = create_slab!(X,Y,Z,Phase,Temp,t_,stratigraphy_slab,temperature_slab);
-d2,l2 = create_slab!(X,Y,Z,Phase,Temp,t_2,stratigraphy_slab,temperature_slab);
+d2,l2 = create_slab!(X,Y,Z,Phase,Temp,t_2,stratigraphy_slab,temperature_slab2);
 
 
 Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp,d,l,d2,l2)) 
