@@ -13,23 +13,17 @@ abstract type AbstractThermalStructure end
 # Basic folder where to contain the function of trench
 # Trench structure: structure that contains all the information concerning the trench boundary 
 @with_kw_noshow mutable struct Trench <: trench_slab
-    n_seg_xy =  1     # Number of segment of the trench plane view (for now, 1 segment)
-    A        =  (0.0,0.0)  # Coordinate 1 {set of coordinates}
-    B        =  (0.0,1.0)  # Coordinate 2 {set of coordinates}
-    # Place holder for segment transformation(i.e., for a given segment you can define a function such that curve and bend the coordinate)
-    # Place holder: changing properties along strike: -function to compute the length of the trench
-    # function that compute how much a certain property is changing (i.e., amount of subducted sediment/continent/temperature)
-    # function that encode how much change a certain properties along the strike) 
-    #(in the future should be possible to change the theta max along strike, or the velocity of convergence or the lenght)
-    # = Slab portion 
-    theta_max = 45 # max bending angle, (must be converted into radians)
-    type_bending  = "Ribe"     # Mode Ribe | Linear | Costumize 
-    n_seg         = 50         # definition segment 
-    L0            = 400        # length of the slab
-    D0            = 100        # thickness of the slab 
-    WZ            = 50        # thickness of the weak zone 
-    Lb            = 200       # Length at which all the bending is happening (Lb<=L0)
-    d_decoupling  = 100       # decoupling depth of the slab
+    n_seg_xy::Int64 =  1     # Number of segment of the trench plane view (for now, 1 segment)
+    A::Array{Float64}       =  (0.0,0.0)  # Coordinate 1 {set of coordinates}
+    B::Array{Float64}     =  (0.0,1.0)  # Coordinate 2 {set of coordinates}
+    theta_max::Float64 = 45 # max bending angle, (must be converted into radians)
+    type_bending::Symbol = :Ribe     # Mode Ribe | Linear | Costumize 
+    n_seg::Int64       = 50         # definition segment 
+    L0:: Float64       = 400        # length of the slab
+    D0:: Float64      = 100        # thickness of the slab 
+    WZ:: Float64       = 50        # thickness of the weak zone 
+    Lb:: Float64    = 200       # Length at which all the bending is happening (Lb<=L0)
+    d_decoupling:: Float64 = 100       # decoupling depth of the slab
 end
 
 
@@ -61,17 +55,11 @@ function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab
         Temp[i] = Tmantle+  (Tsurface .-Tmantle)*erfc((abs.(d[i])*1e3)./(2*sqrt(kappa*ThermalAge)))
     end
 
-    @show it ;
-
     # Convert the velocity 
     v_s = v_s/(100*365.25*60*60*24);
-    @show v_s; 
+    
     # calculate the Reynolds number
     Re = (rho*Cp*v_s*D0*1000)/2/k;
-    @show Re
-    @show k 
-    @show Cp
-
 
     # McKenzie model
     sc = 1/D0
@@ -97,8 +85,6 @@ function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab
     weight[ind_1] .= 1.0; 
     weight[ind_2] .= 0.1;
 
-    #@show weight
-
 
     Temp .= weight .*Temp_McK+(1 .-weight) .*Temp;
 
@@ -114,16 +100,12 @@ end
 #         b.] If the A-B segment are the tip of a more complex curve transform the transform the coordinate (yTT=yT-xT^2=0.0)
 #         c.] Then select all the particles that belongs to each of the segment of the slab. 
 
-function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n_seg::Int64,theta_max::Float64,type_bending::String)
+function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n_seg::Int64,theta_max::Float64,type_bending::Symbol)
     # Convert theta_max into radians
-
     theta_max = theta_max*pi/180;
-
 
     # Allocate the top,mid and bottom surface, and the weakzone 
     Top = zeros(n_seg+1,2);
-
-    theta_mean = zeros(n_seg,1); 
 
     Bottom = zeros(n_seg+1,2);
     Bottom[1,2] = -D0; 
@@ -143,70 +125,57 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
     while l<L0
         ln = l+dl
         # Compute the mean angle within the segment
-        theta_mean[it] = (compute_bending_angle!(theta_max,Lb,l,type_bending)+compute_bending_angle!(theta_max,Lb,ln,type_bending))./2;
+        theta_mean = (compute_bending_angle!(theta_max,Lb,l,type_bending)+compute_bending_angle!(theta_max,Lb,ln,type_bending))./2;
         # Compute the mid surface coordinate
-        MidS[it+1,1] = MidS[it,1]+dl*cos(theta_mean[it]);
+        MidS[it+1,1] = MidS[it,1]+dl*cos(theta_mean);
 
-        MidS[it+1,2] = MidS[it,2]-dl.*sin(theta_mean[it]);
+        MidS[it+1,2] = MidS[it,2]-dl.*sin(theta_mean);
         #Compute the top surface coordinate
 
-        Top[it+1,1] = MidS[it+1,1]+0.5.*D0.*abs(sin(theta_mean[it]));
+        Top[it+1,1] = MidS[it+1,1]+0.5.*D0.*abs(sin(theta_mean));
 
-        Top[it+1,2] = MidS[it+1,2]+0.5.*D0.*abs(cos(theta_mean[it]));
+        Top[it+1,2] = MidS[it+1,2]+0.5.*D0.*abs(cos(theta_mean));
         #Compute the bottom surface coordinate
 
-        Bottom[it+1,1] = MidS[it+1,1]-0.5.*D0.*abs(sin(theta_mean[it]));
+        Bottom[it+1,1] = MidS[it+1,1]-0.5.*D0.*abs(sin(theta_mean));
 
-        Bottom[it+1,2] = MidS[it+1,2]-0.5.*D0.*abs(cos(theta_mean[it]));
+        Bottom[it+1,2] = MidS[it+1,2]-0.5.*D0.*abs(cos(theta_mean));
         # Compute the top surface for the weak zone 
 
-        WZ_surf[it+1,1] = MidS[it+1,1]+(0.5.*D0+WZ).*abs(sin(theta_mean[it]));
+        WZ_surf[it+1,1] = MidS[it+1,1]+(0.5.*D0+WZ).*abs(sin(theta_mean));
 
-        WZ_surf[it+1,2] = MidS[it+1,2]+(0.5.*D0+WZ).*abs(cos(theta_mean[it]));
+        WZ_surf[it+1,2] = MidS[it+1,2]+(0.5.*D0+WZ).*abs(cos(theta_mean));
         # update l and it
         l = ln;
         it = it+1;
+    end
+
+    return Top,Bottom,WZ_surf; #{Filling the structure?}
 
     end
 
-    return Top,MidS,Bottom,WZ_surf,theta_mean; #{Filling the structure?}
-
-    end
-
-function compute_bending_angle!(theta_max::Float64,Lb::Float64,l::Float64,type::String)
-    # Input argument: 
-    # theta_max -> maximum bending angle in radians 
-    # Lb        -> the lenght at which the bending of the slab become effectively constant 
-    # l         -> the actual length 
-
-    if type == "Ribe"    
-        # Compute theta
-        theta = theta_max*l^2*((3*Lb-2*l))/(Lb^3);
-
-    elseif type == "Linear"
-
-        # Compute the slope assuming that the minumum angle is 0.0 
-        s = (theta_max-0)/(L0);
-
-        # Compute the actual angle
-        theta= l*s;
-    end
-    # If l>L0 -> theta = theta_max
+"""
+compute_bending_angle!(θ_max,Lb,l,type)
+θ_max = maximum bending angle 
+Lb    = length at which the function of bending is applied (Lb<=L0)
+l     = current position within the slab
+type  = type of bending {Ribe}{Linear}{Customize} 
+function that computes the θ(l). 
+"""
+function compute_bending_angle!(theta_max::Float64,Lb::Float64,l::Float64,type::Symbol)
     if l>Lb
-
-        theta=theta_max;
+        return theta_max
+    elseif type === :Ribe    
+        # Compute theta
+        return theta_max*l^2*((3*Lb-2*l))/(Lb^3);
+    elseif type === :Linear
+        # Compute the actual angle
+        return l*(theta_max-0)/(Lb);
     end
-
-    return theta 
 end
 
-function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
-    # Spell out the trench structure
-    # Loop over the segment avaiable in the structure
-    # -> transform the coordinate 
-    # -> create XT,YT,ZT such that XT//AB segment and YT is perpendicular
-    # -> See if there are curved boundaries -> compute dy to compute YTT | trench == 0.0. 
-    #1. Spell out the structure
+function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,d::Array{Float64},ls::Array{Float64},strat,temp)
+
 
     D0 = t.D0; 
 
@@ -218,36 +187,33 @@ function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
 
     theta_max = t.theta_max;
 
-    A = t.A;
-
-    B = t.B;
-
     n_seg_xy = t.n_seg_xy; 
 
     WZ = t.WZ; 
 
-    # Allocate d-l structure 
+    # Allocate d-l array and A,B
 
-    # -> d = distance from the top surface
-    d = ones(size(X)).*NaN64;
-
-    # -> l = length from the trench along the slab 
-    ls = ones(size(X)).*NaN64;
+    A = zeros(Float64,2,1);
+    B = zeros(Float64,2,1);
 
     #Loop over the segment of the slab
-    for is =1:n_seg_xy
+    # In theory this loop would loop all the segment of the trench, but if I introduce a n_seg_xy = 1, it throws me an error concerning the iteration. I tried to fix, but the the error message is mysterious 
 
-        Point_A = t.A[is];
+    #for is =1:1
+        is = 1;
+        A[1] = t.A[is];
+        A[2] = t.A[is+1];
+        B[1] = t.B[is];
+        B[2] = t.B[is+1];
 
-        Point_B = t.B[is];
 
         # Compute Top-Bottom surface 
         # Or loop over the segment of the top/bottom surface and inpolygon each element or 
-        Top,MidS,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
+
+        Top,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
 
         XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
-
-        l_decouplingind = findall(Top[:,2].<=-t_.d_decoupling);
+        l_decouplingind = findall(Top[:,2].<=-t.d_decoupling);
 
         l_decoupling = Top[l_decouplingind[1],1];
         
@@ -259,13 +225,14 @@ function create_slab!(X,Y,Z,Ph,T,t,strat,temp)
         # Compute thermal structure accordingly. See routines below for different options
         T[ind] = Compute_ThermalStructureSlab(T[ind], XT[ind], ls[ind], d[ind],temp,l_decoupling,t);
 
+
         # Set the phase. Different routines are available for that - see below.
         Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
 
-    end
+    #end
 
-    return d, ls
 end
+
 
 function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 
@@ -275,8 +242,8 @@ function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
     YT = zeros(size(Y)); 
 
     # Function to transform the coordinate 
-    @show theta_max
-    XT,YT, xb = transform_coordinate!(X,Y,XT,YT,A,B,sign(theta_max)); 
+    @show sign(theta_max)
+    xb = transform_coordinate!(X,Y,Z,XT,YT,A,B,sign(theta_max)); 
 
     # dl 
     dl = L0/seg_slab; 
@@ -379,40 +346,45 @@ function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
     return nothing
 end
 
-function transform_coordinate!(X,Y,XT,YT,A,B,direction)
+function transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
     
     # find the slope of AB points
     s = (B[2]-A[2])/(B[1]-A[1])
 
-    @show s 
-
     angle_rot = -atand(s); 
 
-    @show angle_rot
-
     # Shift the origin 
-    XT = X .-A[1]; 
+    XT .= X .-A[1]; 
 
-    YT = Y .-A[2]; 
+    YT .= Y .-A[2]; 
 
     Bn = zeros(3);
+  
     Bn[1] = B[1]-A[1];
+  
     Bn[2] = B[2]-A[2]; 
+  
     Bn[3] = 0.0;
 
     # Transform the coordinates
     Rot3D!(XT,YT,Z, angle_rot, 0);
-    @show direction
-    YT = YT*direction; 
+    @show(YT[1,1,1])
+    @show(YT[1,1,3])
 
+    YT .= YT*direction; 
+    @show(YT[1,1,1])
+    @show(YT[1,1,3])
+
+    #Find Point B in the new coordinate system 
     roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
+   
     rotz = [cosd(angle_rot) -sind(angle_rot) 0 ; sind(angle_rot) cosd(angle_rot) 0 ; 0 0 1]
 
     Bn = rotz* Bn;
+    
     Bn = roty*Bn; 
-    @show Bn 
 
-    return XT,YT,Bn
+    return Bn
 
 end
 

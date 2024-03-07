@@ -2,59 +2,153 @@ using GeophysicalModelGenerator
 include("../src/trench.jl")
 using Plots
 using ScatteredInterpolation 
+using BenchmarkTools
+
+#Test_Double_subduction()
+#@btime (Test_Double_subduction())
 
 
-# number of cells in every direction
-nx = 256;
-ny = nx;
-nz = nx;
+#function Test_Double_subduction()
+    # number of cells in every direction
+    nx = 256;
+
+    ny = nx;
+
+    nz = nx;
 
 
-# define domain size
-x        = LinRange(0.0,1200.0,nx);
-y        = LinRange(0.0,1200.0,ny);
-z        = LinRange(-660,50,nz);
+    # define domain size
+    x        = LinRange(0.0,1200.0,nx);
 
-X,Y,Z    = XYZGrid(x, y, z);
+    y        = LinRange(0.0,1200.0,ny);
 
-Cart     = CartData(X,Y,Z, (Data=Z,));
+    z        = LinRange(-660,50,nz);
 
-# initialize phase and temperature matrix
-Phase   = ones(Int32,size(X));
+    X,Y,Z    = XYZGrid(x, y, z);
 
-Temp    = ones(Float64,size(X))*1350;
+    Cart     = CartData(X,Y,Z, (Data=Z,));
 
-t_ = Trench(1,(200.0,400.0),(500.0,700.0),90.0,"Ribe",50,500.0,100.0,20.0,200.0,100.0)
+    # initialize phase and temperature matrix
+    Phase   = ones(Int32,size(X));
 
-t_2 = Trench(1,(200.0,400.0),(500.0,700.0),-30.0,"Ribe",50,500.0,100.0,20.0,200.0,100.0)
-t_2.Lb = 400.0
+    Temp    = ones(Float64,size(X))*1350;
 
-stratigraphy_slab = LithosphericPhases(Layers=[10 90], Phases=[2 3 1], Tlab=1300 )
+    # add different phases: crust->2, Mantle Lithosphere->3 Mantle->1
+    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(-660.0,0.0), phase = LithosphericPhases(Layers=[30 400 600], Phases=[2 3 1], Tlab=1300 ), T=HalfspaceCoolingTemp(Tsurface=20.0, Tmantle=1350, Age=120, Adiabat=0.4) )
 
-temperature_slab=McKenzie_subducting_slab(20,1350,30,0.4,2.5,1050,3.0,3300,36);
+    # add air phase 0
+    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(0.0,50.0), phase = ConstantPhase(0), T=ConstantTemp(20.0))
 
-temperature_slab2=McKenzie_subducting_slab(20,1350,30,0.4,10.0,1050,3.0,3300,36);
+    # Create the first trench structre
+    t_ = Trench(1,[200.0,400.0],[500.0,700.0],90.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
+
+    # Create the second trench structre
+    t_2 = Trench(1,[200.0,400.0],[500.0,700.0],-30.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
+
+    t_2.Lb = 400.0;
+
+    # -> d = distance from the top surface
+    d = ones(size(X)).*NaN64;
+
+    # -> l = length from the trench along the slab 
+    ls = ones(size(X)).*NaN64;
+
+    # -> d = distance from the top surface
+    d2 = ones(size(X)).*NaN64;
+
+    # -> l = length from the trench along the slab 
+    ls2 = ones(size(X)).*NaN64;
+
+    stratigraphy_slab = LithosphericPhases(Layers=[10 90], Phases=[2 3 1], Tlab=1300 );
+
+    temperature_slab=McKenzie_subducting_slab(20,1350,30,0.4,2.5,1050,3.0,3300,36);
+
+    temperature_slab2=McKenzie_subducting_slab(20,1350,30,0.4,10.0,1050,3.0,3300,36);
+
+    d,ls = create_slab!(X,Y,Z,Phase,Temp,t_,d,ls,stratigraphy_slab,temperature_slab);
+
+    d2,ls2 = create_slab!(X,Y,Z,Phase,Temp,t_2,d2,ls2,stratigraphy_slab,temperature_slab2);
 
 
+    # Benchmarking each function of the routine
 
-d,l = create_slab!(X,Y,Z,Phase,Temp,t_,stratigraphy_slab,temperature_slab);
-d2,l2 = create_slab!(X,Y,Z,Phase,Temp,t_2,stratigraphy_slab,temperature_slab2);
+    # Save data to paraview:
+    Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp)) 
+
+    Write_Paraview(Data_Final, "Subduction_Setup")
+
+#end
+
+function Benchmark_trench()
+
+    nx = 128;
+
+    ny = nx;
+
+    nz = nx;
+
+    # define domain size
+    x        = LinRange(0.0,1200.0,nx);
+
+    y        = LinRange(0.0,1200.0,ny);
+
+    z        = LinRange(-660,50,nz);
+
+    X,Y,Z    = XYZGrid(x, y, z);
+
+    Cart     = CartData(X,Y,Z, (Data=Z,));
+
+    # initialize phase and temperature matrix
+    Phase   = ones(Int32,size(X));
+
+    Temp    = ones(Float64,size(X))*1350;
+    
+    t_ = Trench(1,[200.0,400.0],[500.0,700.0],90.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
+
+    # Benchmarking each function of the routine
+
+    # -> d = distance from the top surface
+    d = ones(size(X)).*NaN64;
+
+    # -> l = length from the trench along the slab 
+    ls = ones(size(X)).*NaN64;
+
+    stratigraphy_slab = LithosphericPhases(Layers=[10 90], Phases=[2 3 1], Tlab=1300 );
+
+    temperature_slab=McKenzie_subducting_slab(20,1350,30,0.4,2.5,1050,3.0,3300,36);
+
+    XT = zeros(size(X));
+
+    YT = zeros(size(Y)); 
+
+    # Function to transform the coordinate 
+    # Most Problematic function 
+    xb = transform_coordinate!($X,$Y,$XT,$YT,$t_.A,$t_.B,sign($t_.theta_max)); 
+    
+    @code_warntype (transform_coordinate!(X,Y,Z,XT,YT,t_.A,t_.B,sign(t_.theta_max)))
+    @btime (transform_coordinate!($X,$Y,$Z,$XT,$YT,$t_.A,$t_.B,sign($t_.theta_max)))
+    # Rotate coordinate: 
+    Rot3D!(XT,YT,Z, 40, 0);
+    @btime (Rot3D!($XT,$YT,$Z, $40, $0))
+    # dl 
+
+    @code_warntype (compute_slab_surface!(t_.D0,t_.L0,t_.Lb,t_.WZ,t_.n_seg,abs(t_.theta_max),t_.type_bending))
+    @btime (compute_slab_surface!($t_.D0,$t_.L0,$t_.Lb,$t_.WZ,$t_.n_seg,abs($t_.theta_max),$t_.type_bending))
+
+    @btime (compute_bending_angle!(abs($t_.theta_max),$t_.Lb,10.0,$t_.type_bending))
+    @code_warntype (compute_bending_angle!(abs(t_.theta_max),t_.Lb,10.0,t_.type_bending))
+
+    Top,Bottom = compute_slab_surface!(t_.D0,t_.L0,t_.Lb,t_.WZ,t_.n_seg,abs(t_.theta_max),t_.type_bending)
+    @code_warntype(find_slab!(X,Y,Z,d,ls,t_.theta_max,t_.A,t_.B,Top,Bottom,t_.n_seg,t_.D0,t_.L0))
+    @btime(find_slab!($X,$Y,$Z,$d,$ls,$t_.theta_max,$t_.A,$t_.B,$Top,$Bottom,$t_.n_seg,$t_.D0,$t_.L0))
 
 
-Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp,d,l,d2,l2)) 
-Write_Paraview(Data_Final, "Subduction_example")
+    @btime (create_slab!($X,$Y,$Z,$Phase,$Temp,$t_,$d,$ls,$stratigraphy_slab,$temperature_slab))
+    @code_warntype(create_slab!(X,Y,Z,Phase,Temp,t_,d,ls,stratigraphy_slab,temperature_slab))
 
-# add different phases: crust->2, Mantle Lithosphere->3 Mantle->1
-AddBox!(Phase, Temp, Cart; xlim=(0.0,800.0),ylim=(0.0,800.0), zlim=(-660.0,0.0), phase = LithosphericPhases(Layers=[30 400 600], Phases=[2 3 1], Tlab=1300 ), T=HalfspaceCoolingTemp(Tsurface=20.0, Tmantle=1350, Age=120, Adiabat=0.4) )
-
-# add air phase 0
-AddBox!(Phase, Temp, Cart; xlim=(0.0,800.0),ylim=(0.0,800.0), zlim=(0.0,50.0), phase = ConstantPhase(0), T=ConstantTemp(20.0))
-
-# Save data to paraview:
-Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp)) 
-Write_Paraview(Data_Final, "Subduction_Setup")
-
-
-
+    Test_Double_subduction()
+    @btime (Test_Double_subduction())
+    
+end
 
 
