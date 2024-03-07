@@ -31,8 +31,9 @@ d_decoupling: it represents the depth at which both of the surface of the slab a
     e. Compute the phase field
 
 """
+function Double_Subduction()
     # number of cells in every direction
-    nx = 256;
+    nx = 128*3;
 
     ny = nx;
 
@@ -56,10 +57,10 @@ d_decoupling: it represents the depth at which both of the surface of the slab a
     Temp    = ones(Float64,size(X))*1350;
 
     # add different phases: crust->2, Mantle Lithosphere->3 Mantle->1
-    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(-660.0,0.0), phase = LithosphericPhases(Layers=[30 400 600], Phases=[2 3 1], Tlab=1300 ), T=HalfspaceCoolingTemp(Tsurface=20.0, Tmantle=1350, Age=120, Adiabat=0.4) )
+    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(-660.0,0.0), phase = LithosphericPhases(Layers=[30 400 600], Phases=[2 3 1], Tlab=1300 ), T=HalfspaceCoolingTemp(Tsurface=20.0, Tmantle=1350, Age=120, Adiabat=0.4) );
 
     # add air phase 0
-    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(0.0,50.0), phase = ConstantPhase(0), T=ConstantTemp(20.0))
+    AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(0.0,50.0), phase = ConstantPhase(0), T=ConstantTemp(20.0));
 
     # Create the first trench structre
     t_1 = Trench(1,[200.0,400.0],[500.0,700.0],90.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
@@ -85,6 +86,10 @@ d_decoupling: it represents the depth at which both of the surface of the slab a
     Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp)) 
 
     Write_Paraview(Data_Final, "Double_Subduction")
+
+end
+
+@time Double_Subduction()
 
 
 #function Benchmark_trench()

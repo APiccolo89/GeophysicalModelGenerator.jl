@@ -382,7 +382,7 @@ function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::
         T[ind] = Compute_ThermalStructureSlab(T[ind], Z[ind], ls[ind], d[ind],temp,l_decoupling,t);
 
         # Set the phase. Different routines are available for that - see below.
-        Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
+        Ph[ind] = Compute_Phase(Ph[ind], T[ind], X[ind], ls[ind], d[ind], strat)
 
         # Place holder of the weak zone: it is simply using the find slab routine, and cutting it at d_decoupling. 
 
