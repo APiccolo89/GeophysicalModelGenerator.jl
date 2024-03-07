@@ -27,20 +27,23 @@ abstract type AbstractThermalStructure end
 end
 
 
-
 @with_kw_noshow mutable struct McKenzie_subducting_slab <: AbstractThermalStructure
-    Tsurface = 20       # top T
-    Tmantle  = 1350     # bottom T
-    Age      = 60          # thermal age of plate [in Myrs]
-    Adiabat  = 0        # Adiabatic gradient in K/km
-    v_s      = 2.0      # velocity of subduction  [cm/yrs]
-    Cp       = 1050     # Heat capacity   []
-    k        = 3        # Heat conductivity 
-    rho      = 3300     # denisty of the mantle [km/m3]
-    it       = 36       # number of harmonic summation (look Mckenzie formula)
+    Tsurface::Float64 = 20.0       # top T
+    Tmantle::Float64  = 1350.0     # bottom T
+    Age::Float64     = 60.0          # thermal age of plate [in Myrs]
+    Adiabat::Float64  = 0.4        # Adiabatic gradient in K/km
+    v_s::Float64      = 2.0      # velocity of subduction  [cm/yrs]
+    Cp::Float64       = 1050.0     # Heat capacity   []
+    k::Float64        = 3.0        # Heat conductivity 
+    rho::Float64      = 3300.0     # denisty of the mantle [km/m3]
+    it::Int64       = 36       # number of harmonic summation (look Mckenzie formula)
 end
-
-function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab,ldc,t::Trench)
+"""
+    Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab,ldc,t::Trench)
+Compute the thermal structure for the slab: first compute the half-space cooling model. Then compute the McKenzie solution
+then as a function of l (length of the slab) it does a weigthed average between the two field. At ldc {length of decoupling} the temperature is dominated by the Mckenzie solution
+"""
+function Compute_ThermalStructureSlab(Temp, Z, l, d, s::McKenzie_subducting_slab,ldc,t::Trench)
 
     @unpack Tsurface, Tmantle, Adiabat, Age, v_s, Cp, k, rho, it = s
     @unpack L0, D0, d_decoupling = t
@@ -50,9 +53,9 @@ function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab
     SecYear     =   3600*24*365
     ThermalAge  =   Age*1e6*SecYear
 
-    # Compute the 
+    # Compute the + Adiabat*abs.(Z)
     for i in eachindex(Temp)
-        Temp[i] = Tmantle+  (Tsurface .-Tmantle)*erfc((abs.(d[i])*1e3)./(2*sqrt(kappa*ThermalAge)))
+        Temp[i] = (Tmantle) +  (Tsurface .-Tmantle)*erfc((abs.(d[i])*1e3)./(2*sqrt(kappa*ThermalAge)))
     end
 
     # Convert the velocity 
@@ -87,19 +90,19 @@ function Compute_ThermalStructureSlab(Temp, X, l, d, s::McKenzie_subducting_slab
 
 
     Temp .= weight .*Temp_McK+(1 .-weight) .*Temp;
+    Temp .= Temp + Adiabat*abs.(Z);
 
     return Temp
 end
 
-# function to compute top surface bottom surface 
-# What do I have in mind? 
-# => For a given segment of any orientation: 
-# 1. Transform the coordinate system such that xT // to the current segment
-# 2. On top of that apply any additional transformation (i.e., circular boundary or whatever)
-#   e.g., a.] Given A-B rotate the coordinate such that x^T// the segment. 
-#         b.] If the A-B segment are the tip of a more complex curve transform the transform the coordinate (yTT=yT-xT^2=0.0)
-#         c.] Then select all the particles that belongs to each of the segment of the slab. 
+"""
+    compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n_seg::Int64,theta_max::Float64,type_bending::Symbol)
 
+Compute the coordinate of the slab top, bottom surface using the mid surface of the slab as reference. It computes it by discretizing the slab surface
+in n segments, and computing the average bending angle {which is a function of the current length of the slab}. Then compute the coordinate 
+assuming that the trench is at 0.0, and assuming a positive theta_max angle. 
+
+"""
 function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n_seg::Int64,theta_max::Float64,type_bending::Symbol)
     # Convert theta_max into radians
     theta_max = theta_max*pi/180;
@@ -155,7 +158,7 @@ function compute_slab_surface!(D0::Float64,L0::Float64,Lb::Float64,WZ::Float64,n
     end
 
 """
-compute_bending_angle!(θ_max,Lb,l,type)
+    compute_bending_angle!(θ_max,Lb,l,type)
 θ_max = maximum bending angle 
 Lb    = length at which the function of bending is applied (Lb<=L0)
 l     = current position within the slab
@@ -174,73 +177,55 @@ function compute_bending_angle!(theta_max::Float64,Lb::Float64,l::Float64,type::
     end
 end
 
-function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,strat,temp)
+"""
+       transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
+Transform the coordinate such that the new x axis (XT) is parallel to the segment A-B of the slab. The rotation is
+anticlockwise. If θ_max is negative, it multiplies YT with the sign of the angle, changing the dip of the subduction.
 
-    d = ones(size(X)).*NaN64;
+"""
 
-    # -> l = length from the trench along the slab 
-    ls = ones(size(X)).*NaN64;
+function transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
+    
+    # find the slope of AB points
+    s = (B[2]-A[2])/(B[1]-A[1])
 
+    angle_rot = -atand(s); 
 
-    D0 = t.D0; 
+    # Shift the origin 
+    XT .= X .-A[1]; 
 
-    L0 = t.L0;
+    YT .= Y .-A[2]; 
 
-    n_seg = t.n_seg;
+    Bn = zeros(3);
+  
+    Bn[1] = B[1]-A[1];
+  
+    Bn[2] = B[2]-A[2]; 
+  
+    Bn[3] = 0.0;
 
-    Lb    = t.Lb; 
+    # Transform the coordinates
+    Rot3D!(XT,YT,Z, angle_rot, 0);
 
-    theta_max = t.theta_max;
-
-    n_seg_xy = t.n_seg_xy; 
-
-    WZ = t.WZ; 
-
-    # Allocate d-l array and A,B
-
-    A = zeros(Float64,2,1);
-    B = zeros(Float64,2,1);
-
-    #Loop over the segment of the slab
-    # In theory this loop would loop all the segment of the trench, but if I introduce a n_seg_xy = 1, it throws me an error concerning the iteration. I tried to fix, but the the error message is mysterious 
-
-    #for is =1:1
-        is = 1;
-        A[1] = t.A[is];
-        A[2] = t.A[is+1];
-        B[1] = t.B[is];
-        B[2] = t.B[is+1];
+    YT .= YT*direction; 
 
 
-        # Compute Top-Bottom surface 
-        # Or loop over the segment of the top/bottom surface and inpolygon each element or 
+    #Find Point B in the new coordinate system 
+    roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
+   
+    rotz = [cosd(angle_rot) -sind(angle_rot) 0 ; sind(angle_rot) cosd(angle_rot) 0 ; 0 0 1]
 
-        Top,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
+    Bn = rotz* Bn;
+    
+    Bn = roty*Bn; 
 
-        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
-        
-        l_decouplingind = findall(Top[:,2].<=-t.d_decoupling);
-
-        l_decoupling = Top[l_decouplingind[1],1];
-        
-
-        # Function to fill up the temperature and the phase. I need to personalize addbox! 
-
-        ind = findall((-D0 .<= d .<= 0.0));
-
-        # Compute thermal structure accordingly. See routines below for different options
-        T[ind] = Compute_ThermalStructureSlab(T[ind], XT[ind], ls[ind], d[ind],temp,l_decoupling,t);
-
-        # Set the phase. Different routines are available for that - see below.
-        Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
-
-        # Place holder of the weak zone: it is simply using the find slab routine, and cutting it at d_decoupling. 
-
-    #end
+    return Bn
 
 end
 
+"""
 
+"""
 function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 
     # Create the XT,YT 
@@ -333,6 +318,83 @@ function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
 end
 
 
+"""
+    create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,strat,temp)
+
+Main function that creates the slab. Unpack the variable from the structure, create two arrays that contains the information of l and d. 
+    l and d are the array containing the length of the slab per each coordinate belonging to the slab, and the distance from the surface. 
+    In this function compute_slab_surface and find_slab are called. And after d and ls are computed, it fill up the temperature and phase arrays
+
+
+"""
+function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,strat,temp)
+
+    d = ones(size(X)).*NaN64;
+
+    # -> l = length from the trench along the slab 
+    ls = ones(size(X)).*NaN64;
+
+
+    D0 = t.D0; 
+
+    L0 = t.L0;
+
+    n_seg = t.n_seg;
+
+    Lb    = t.Lb; 
+
+    theta_max = t.theta_max;
+
+    n_seg_xy = t.n_seg_xy; 
+
+    WZ = t.WZ; 
+
+    # Allocate d-l array and A,B
+
+    A = zeros(Float64,2,1);
+    B = zeros(Float64,2,1);
+
+    #Loop over the segment of the slab
+    # In theory this loop would loop all the segment of the trench, but if I introduce a n_seg_xy = 1, it throws me an error concerning the iteration. I tried to fix, but the the error message is mysterious 
+
+    #for is =1:1
+        is = 1;
+        A[1] = t.A[is];
+        A[2] = t.A[is+1];
+        B[1] = t.B[is];
+        B[2] = t.B[is+1];
+
+
+        # Compute Top-Bottom surface 
+        # Or loop over the segment of the top/bottom surface and inpolygon each element or 
+
+        Top,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
+
+        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
+        
+        l_decouplingind = findall(Top[:,2].<=-t.d_decoupling);
+
+        l_decoupling = Top[l_decouplingind[1],1];
+        
+
+        # Function to fill up the temperature and the phase. I need to personalize addbox! 
+
+        ind = findall((-D0 .<= d .<= 0.0));
+
+        # Compute thermal structure accordingly. See routines below for different options {Future: introducing the length along the trench for having lateral varying properties along the trench}
+        T[ind] = Compute_ThermalStructureSlab(T[ind], Z[ind], ls[ind], d[ind],temp,l_decoupling,t);
+
+        # Set the phase. Different routines are available for that - see below.
+        Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
+
+        # Place holder of the weak zone: it is simply using the find slab routine, and cutting it at d_decoupling. 
+
+    #end
+
+end
+"""
+I was not able to export this function. When I port this function on the Setup_geometry, this part is completely useless. 
+"""
 
 # Internal function that rotates the coordinates
 function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
@@ -353,44 +415,6 @@ function Rot3D!(X,Y,Z, StrikeAngle, DipAngle)
     return nothing
 end
 
-function transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
-    
-    # find the slope of AB points
-    s = (B[2]-A[2])/(B[1]-A[1])
-
-    angle_rot = -atand(s); 
-
-    # Shift the origin 
-    XT .= X .-A[1]; 
-
-    YT .= Y .-A[2]; 
-
-    Bn = zeros(3);
-  
-    Bn[1] = B[1]-A[1];
-  
-    Bn[2] = B[2]-A[2]; 
-  
-    Bn[3] = 0.0;
-
-    # Transform the coordinates
-    Rot3D!(XT,YT,Z, angle_rot, 0);
-
-    YT .= YT*direction; 
-
-
-    #Find Point B in the new coordinate system 
-    roty = [cosd(-0) 0 sind(-0) ; 0 1 0 ; -sind(-0) 0  cosd(-0)];
-   
-    rotz = [cosd(angle_rot) -sind(angle_rot) 0 ; sind(angle_rot) cosd(angle_rot) 0 ; 0 0 1]
-
-    Bn = rotz* Bn;
-    
-    Bn = roty*Bn; 
-
-    return Bn
-
-end
 
 """
     inPolygon!(INSIDE::Matrix, PolyX::Vector, PolyY::Vector, X::Matrix, Y::Matrix; fast=false)

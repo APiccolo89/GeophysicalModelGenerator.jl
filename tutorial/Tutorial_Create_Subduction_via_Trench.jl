@@ -62,25 +62,29 @@ d_decoupling: it represents the depth at which both of the surface of the slab a
     AddBox!(Phase, Temp, Cart; xlim=(0.0,1200.0),ylim=(0.0,1200.0), zlim=(0.0,50.0), phase = ConstantPhase(0), T=ConstantTemp(20.0))
 
     # Create the first trench structre
-    t_ = Trench(1,[200.0,400.0],[500.0,700.0],90.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
+    t_1 = Trench(1,[200.0,400.0],[500.0,700.0],90.0,:Ribe,50,500.0,100.0,20.0,200.0,100.0);
 
     # Create the second trench structre
     t_2 = Trench(1,[200.0,400.0],[500.0,700.0],-30.0,:Ribe,50,500.0,100.0,20.0,400.0,100.0);
 
+    # Stratigraphy of the slab
     stratigraphy_slab = LithosphericPhases(Layers=[10 100], Phases=[5 5 5], Tlab=1300 );
 
-    temperature_slab=McKenzie_subducting_slab(20,1350,30,0.4,2.5,1050,3.0,3300,36);
+    #Temperature field of the first slab
+    temperature_slab=McKenzie_subducting_slab(20.0,1350.0,30.0,0.4,2.5,1050.0,3.0,3300.0,36);
 
-    temperature_slab2=McKenzie_subducting_slab(20,1350,30,0.4,10.0,1050,3.0,3300,36);
+    #Temperature field of the second slab
+    temperature_slab2=McKenzie_subducting_slab(20.0,1350.0,30.0,0.4,10.0,1050.0,3.0,3300.0,36);
 
-    d,ls = create_slab!(X,Y,Z,Phase,Temp,t_,stratigraphy_slab,temperature_slab);
-
-    d2,ls2 = create_slab!(X,Y,Z,Phase,Temp,t_2,stratigraphy_slab,temperature_slab2);
+    #Create the first slab
+    create_slab!(X,Y,Z,Phase,Temp,t_1,stratigraphy_slab,temperature_slab);
+    # Create the second slab 
+    create_slab!(X,Y,Z,Phase,Temp,t_2,stratigraphy_slab,temperature_slab2);
 
     # Save data to paraview:
     Data_Final      =   CartData(X,Y,Z,(Phase=Phase,Temp=Temp)) 
 
-    Write_Paraview(Data_Final, "Subduction_Setup2")
+    Write_Paraview(Data_Final, "Double_Subduction")
 
 
 #function Benchmark_trench()
