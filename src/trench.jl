@@ -82,7 +82,7 @@ function Compute_ThermalStructureSlab(Temp, Z, l, d, s::McKenzie_subducting_slab
     Temp_McK[ind_neg]  .= Tsurface; 
 
 
-    weight = 0.1 .+(0.8-0.1) ./(ldc*sc) .*(l*sc)
+    weight = 0.1 .+(0.9-0.1) ./(ldc*sc) .*(l*sc)
     ind_1 = findall(weight .>1.0);
     ind_2 =findall(weight .<0.1);
     weight[ind_1] .= 1.0; 
@@ -181,7 +181,7 @@ end
        transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
 Transform the coordinate such that the new x axis (XT) is parallel to the segment A-B of the slab. The rotation is
 anticlockwise. If θ_max is negative, it multiplies YT with the sign of the angle, changing the dip of the subduction.
-
+It returns Bn -> which is the point B coordinate in the new transformed system. 
 """
 
 function transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
@@ -312,9 +312,6 @@ function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
         #Update l
         l = ln; 
     end
-
-    # The required variable {XT the x vector transformed, d, the layout of d, l, the layout of length, xb the limit of the slab along x}
-    return XT, d, ls, xb
 end
 
 
@@ -370,7 +367,7 @@ function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::
 
         Top,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
 
-        XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
+        find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
         
         l_decouplingind = findall(Top[:,2].<=-t.d_decoupling);
 
