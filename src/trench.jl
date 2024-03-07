@@ -174,7 +174,12 @@ function compute_bending_angle!(theta_max::Float64,Lb::Float64,l::Float64,type::
     end
 end
 
-function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,d::Array{Float64},ls::Array{Float64},strat,temp)
+function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::Array{Int32},T::Array{Float64},t::Trench,strat,temp)
+
+    d = ones(size(X)).*NaN64;
+
+    # -> l = length from the trench along the slab 
+    ls = ones(size(X)).*NaN64;
 
 
     D0 = t.D0; 
@@ -213,6 +218,7 @@ function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::
         Top,Bottom,WZ_surf =compute_slab_surface!(D0,L0,Lb,WZ,n_seg,abs(theta_max),t.type_bending);
 
         XT,d,ls,xb=find_slab!(X,Y,Z,d,ls,t.theta_max,A,B,Top,Bottom,t.n_seg,t.D0,t.L0);
+        
         l_decouplingind = findall(Top[:,2].<=-t.d_decoupling);
 
         l_decoupling = Top[l_decouplingind[1],1];
@@ -225,9 +231,10 @@ function create_slab!(X::Array{Float64},Y::Array{Float64},Z::Array{Float64},Ph::
         # Compute thermal structure accordingly. See routines below for different options
         T[ind] = Compute_ThermalStructureSlab(T[ind], XT[ind], ls[ind], d[ind],temp,l_decoupling,t);
 
-
         # Set the phase. Different routines are available for that - see below.
         Ph[ind] = Compute_Phase(Ph[ind], T[ind], XT[ind], ls[ind], d[ind], strat)
+
+        # Place holder of the weak zone: it is simply using the find slab routine, and cutting it at d_decoupling. 
 
     #end
 
