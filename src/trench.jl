@@ -224,6 +224,10 @@ function transform_coordinate!(X,Y,Z,XT,YT,A,B,direction)
 end
 
 """
+    find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
+Function that finds the slab. It loops over the Top and Bottom surface of the slab. 
+It creates small poligons where and check if in the transformed coordinate system there are particles belonging to that polygo
+then interpolates the distance from the top, and the current length from the corners. 
 
 """
 function find_slab!(X,Y,Z,d,ls,theta_max,A,B,Top,Bottom,seg_slab,D0,L0)
