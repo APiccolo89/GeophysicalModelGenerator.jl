@@ -1095,37 +1095,47 @@ end
 Compute_Phase(Phase, Temp, Grid::LaMEM_grid, s::LithosphericPhases) = Compute_Phase(Phase, Temp, Grid.X, Grid.Y, Grid.Z, s::LithosphericPhases, Ztop=maximum(Grid.coord_z))
 
 """
-Thermal structure for McKenzie
+    McKenzie_subducting_slab
+
+Thermal structure by McKenzie for a subducted slab that is fully embedded in the mantle.
+
+Parameters
+===
+- Tsurface:     Top T [C]
+- Tmantle:      Bottom T [C]
+- Adiabat:      Adiabatic gradient in K/km
+- v_cm_yr:      Subduction velocity [cm/yr]
+- κ:            Thermal diffusivity [m2/s]
+- it:           Number iterations employed in the harmonic summation
+
 """
 @with_kw_noshow mutable struct McKenzie_subducting_slab <: AbstractThermalStructure
     Tsurface::Float64 = 20.0       # top T
     Tmantle::Float64  = 1350.0     # bottom T
     Adiabat::Float64  = 0.4        # Adiabatic gradient in K/km
-    v_s::Float64      = 2.0      # velocity of subduction  [cm/yrs]
-    Cp::Float64       = 1050.0     # Heat capacity   []
-    k::Float64        = 3.0        # Heat conductivity 
-    rho::Float64      = 3300.0     # denisty of the mantle [km/m3]
-    it::Int64          = 36       # number of harmonic summation (look Mckenzie formula)
+    v_cm_yr::Float64  = 2.0        # velocity of subduction [cm/yr]
+    κ::Float64        = 1e-6       # Thermal diffusivity [m2/s]
+    it::Int64         = 36         # number of harmonic summation (look Mckenzie formula)
 end
+
 """ 
     Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
-Compute the temperature field of Mckenzie. 
+
+Compute the temperature field of a `McKenzie_subducting_slab` scenario 
 """
-
 function Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
-
-    @unpack Tsurface, Tmantle, Adiabat, Age, v_s, Cp, k, rho, it = s
+    @unpack Tsurface, Tmantle, Adiabat, Age, v_cm_yr, κ, it = s
 
     # Thickness of the layer: 
     D0          =   Z[end]-Z[1];
 
-    # Convert the velocity from cm/yrs -> m/s; 
+    # Convert subduction velocity from cm/yr -> m/s; 
     convert_velocity = 1/(100.0*365.25*60.0*60.0*24.0);
 
-    v_s = v_s*convert_velocity;
+    v_s = v_cm_yr*convert_velocity;
     
     # calculate the Reynolds number
-    Re = (rho*Cp*v_s*D0*1000)/2/k;
+    Re = (v_s*D0*1000)/2/κ;
 
     # McKenzie model
     sc = 1/D0
@@ -1147,6 +1157,8 @@ function Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
 end
 
 """
+    LinearWeightedTemperature
+    
 Weight average structure -> correction from previous version Boris Kaus
 """
 @with_kw_noshow mutable struct LinearWeightedTemperature <: AbstractThermalStructure 
@@ -1170,7 +1182,6 @@ end
     this smoothening and in a such way that 0.0 is the point in which the weight of F1 is equal to 0.0; 
     -> Select the points that belongs to this area -> compute the thermal fields {F1} {F2} -> then modify F. 
 """
-
 function Compute_ThermalStructure(Temp, X, Y, Z, Phase, s::LinearWeightedTemperature)
     @unpack w_min, w_max, crit_dist,dir = s; 
     @unpack F1, F2 = s; 
