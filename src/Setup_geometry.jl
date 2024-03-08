@@ -1107,6 +1107,10 @@ Thermal structure for McKenzie
     rho::Float64      = 3300.0     # denisty of the mantle [km/m3]
     it::Int64          = 36       # number of harmonic summation (look Mckenzie formula)
 end
+""" 
+    Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
+Compute the temperature field of Mckenzie. 
+"""
 
 function Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
 
@@ -1142,3 +1146,47 @@ function Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
     return Temp
 end
 
+abstract type Weight_Average end ;
+
+"""
+Weight average structure
+"""
+@with_kw_noshow mutable struct Linear_Weight <: Weight_Average 
+    w_min::Float64 = 0.0; 
+    w_max::Float64 = 1.0; 
+    crit_dist::Float64 = 100.0;
+end
+
+"""
+    Weight average along distance
+    Do a weight average between two field along a specified direction 
+    Given a distance {could be any array, from X,Y} -> it increase from the origin the weight of 
+    F1, while F2 decreases. 
+    This function has been conceived for averaging the solution of Mckenzie and half space cooling model, but in 
+    can be used to smooth the temperature field from continent ocean: 
+    -> Select the boundary to apply; 
+    -> transform the coordinate such that dist represent the perpendicular direction along which you want to apply
+    this smoothening and in a such way that 0.0 is the point in which the weight of F1 is equal to 0.0; 
+    -> Select the points that belongs to this area -> compute the thermal fields {F1} {F2} -> then modify F. 
+"""
+
+function weight_average(F::Float64,F1::Float64,F2::Float64,dist::Array{Float64},w::Linear_Weight)
+    @unpack w_min, w_max, crit_dist = s; 
+
+    # Compute the weights
+    weight = w_min .+(w_max-w_min) ./(crit_dist) .*(dist)
+
+    # Find the indexes where the weight are higher than wmax or wmin
+    ind_1 = findall(weight .>w_max);
+    
+    ind_2 =findall(weight .<w_min);
+
+    # Change the weight 
+    weight[ind_1] .= w_max; 
+    
+    weight[ind_2] .= w_min;
+
+    # Compute the final weight 
+    F .= F1 .*weight+ F2 .*(1-weight); 
+
+end
