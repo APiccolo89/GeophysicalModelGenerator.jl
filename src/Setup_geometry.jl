@@ -13,7 +13,7 @@ export  AddBox!, AddSphere!, AddEllipsoid!, AddCylinder!, AddLayer!, AddPolygon!
         makeVolcTopo,
         ConstantTemp, LinearTemp, HalfspaceCoolingTemp, SpreadingRateTemp, LithosphericTemp,
         ConstantPhase, LithosphericPhases,
-        Compute_ThermalStructure, Compute_Phase,Compute_ThermalStructureSlab,create_slab!
+        Compute_ThermalStructure, Compute_Phase,weight_average
 
 
 """
@@ -1146,15 +1146,16 @@ function Compute_ThermalStructure(Temp, X, Y, Z, s::McKenzie_subducting_slab)
     return Temp
 end
 
-abstract type Weight_Average end ;
-
 """
-Weight average structure
+Weight average structure -> correction from previous version Boris Kaus
 """
-@with_kw_noshow mutable struct Linear_Weight <: Weight_Average 
+@with_kw_noshow mutable struct LinearWeightedTemperature <: AbstractThermalStructure 
     w_min::Float64 = 0.0; 
     w_max::Float64 = 1.0; 
     crit_dist::Float64 = 100.0;
+    dir::Symbol =:X; 
+    F1::AbstractThermalStructure = ConstantTemp();
+    F2::AbstractThermalStructure = ConstantTemp();
 end
 
 """
@@ -1170,13 +1171,26 @@ end
     -> Select the points that belongs to this area -> compute the thermal fields {F1} {F2} -> then modify F. 
 """
 
-function weight_average(F::Float64,F1::Float64,F2::Float64,dist::Array{Float64},w::Linear_Weight)
-    @unpack w_min, w_max, crit_dist = s; 
+function Compute_ThermalStructure(Temp, X, Y, Z, Phase, s::LinearWeightedTemperature)
+    @unpack w_min, w_max, crit_dist,dir = s; 
+    @unpack F1, F2 = s; 
+    
+    if dir === :X
+        dist = X; 
+    elseif dir ===:Y 
+        dist = Y; 
+    else
+        dist = Z; 
+    end
+  
+    # compute the 1D thermal structures
+    Temp1 =  Compute_ThermalStructure(Temp, X, Y, Z, Phase, F1);
+    
+    Temp2 =  Compute_ThermalStructure(Temp, X, Y, Z, Phase, F2);
 
     # Compute the weights
     weight = w_min .+(w_max-w_min) ./(crit_dist) .*(dist)
 
-    # Find the indexes where the weight are higher than wmax or wmin
     ind_1 = findall(weight .>w_max);
     
     ind_2 =findall(weight .<w_min);
@@ -1186,7 +1200,7 @@ function weight_average(F::Float64,F1::Float64,F2::Float64,dist::Array{Float64},
     
     weight[ind_2] .= w_min;
 
-    # Compute the final weight 
-    F .= F1 .*weight+ F2 .*(1-weight); 
-
+    # Average
+    Temp = Temp1 .*weight+ Temp2 .*(1.0 - weight); 
+    return Temp
 end
