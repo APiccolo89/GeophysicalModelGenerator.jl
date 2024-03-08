@@ -464,7 +464,7 @@ X,Y,Z = coordinate_grids(Grid)
 
 indx = zeros(length(X))
 
-# find points of the total script within the polygone, only in 2D due to the symetric structures and index of y
+# find points of the total script within the polygon, only in 2D due to the symmetric structures and index of y
 for i = 1:length(X)
 
     # working but not the fastest
@@ -473,7 +473,7 @@ for i = 1:length(X)
     end
 end
 
-# get all indices which are in the polygone separated
+# get all indices which are in the polygon separated
 ind = findall(x->x>0,indx)
 
 
@@ -1158,7 +1158,7 @@ end
 
 """
     LinearWeightedTemperature
-    
+
 Weight average structure -> correction from previous version Boris Kaus
 """
 @with_kw_noshow mutable struct LinearWeightedTemperature <: AbstractThermalStructure 
