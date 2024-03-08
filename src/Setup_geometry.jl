@@ -13,7 +13,7 @@ export  AddBox!, AddSphere!, AddEllipsoid!, AddCylinder!, AddLayer!, AddPolygon!
         makeVolcTopo,
         ConstantTemp, LinearTemp, HalfspaceCoolingTemp, SpreadingRateTemp, LithosphericTemp,
         ConstantPhase, LithosphericPhases,
-        Compute_ThermalStructure, Compute_Phase,weight_average
+        Compute_ThermalStructure, Compute_Phase,weight_average,McKenzie_subducting_slab
 
 
 """
